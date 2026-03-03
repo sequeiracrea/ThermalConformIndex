@@ -22,47 +22,56 @@ canvas{background:#0e0e0e;}
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
+// TRIANGLE EXTERIEUR FIXE
 const outer = [
   {x:350, y:120},
   {x:620, y:600},
   {x:80,  y:600}
 ];
 
-const gapOuter = 30;      // distance cercle → contour extérieur
-const circleMin = 20;
-const circleMax = 90;
-
-const innerCircleGap = 12; // 🔥 espace blanc visible constant
+const offsetInner = 70;        // distance constante entre triangles
+const blackMin = 25;
+const blackMax = 95;
+const whiteGap = 14;           // contour blanc visible
 
 let t = 0;
 
+// -----------------------------
 function normalize(v){
   const l = Math.hypot(v.x,v.y);
   return {x:v.x/l, y:v.y/l};
 }
 
-function computeCircle(index,value){
+// -----------------------------
+// OFFSET TRIANGLE (côtés parallèles)
+// -----------------------------
+function offsetTriangle(tri, offset){
 
-  const prev = outer[(index+2)%3];
-  const cur = outer[index];
-  const next = outer[(index+1)%3];
+  const result = [];
 
-  const v1 = normalize({x:prev.x-cur.x, y:prev.y-cur.y});
-  const v2 = normalize({x:next.x-cur.x, y:next.y-cur.y});
-  const bis = normalize({x:v1.x+v2.x, y:v1.y+v2.y});
+  for(let i=0;i<3;i++){
+    const p0 = tri[i];
+    const p1 = tri[(i+1)%3];
 
-  const rBlack = circleMin + value*(circleMax-circleMin);
+    const edge = normalize({
+      x:p1.x-p0.x,
+      y:p1.y-p0.y
+    });
 
-  const rWhite = rBlack + innerCircleGap;
+    const normal = {x:-edge.y, y:edge.x};
 
-  return {
-    cx: cur.x + bis.x*(gapOuter + rWhite),
-    cy: cur.y + bis.y*(gapOuter + rWhite),
-    rBlack,
-    rWhite
-  };
+    result.push({
+      x:p0.x + normal.x*offset,
+      y:p0.y + normal.y*offset
+    });
+  }
+
+  return result;
 }
 
+// -----------------------------
+// Dessin triangle extérieur
+// -----------------------------
 function drawOuter(){
   ctx.beginPath();
   ctx.moveTo(outer[0].x, outer[0].y);
@@ -74,30 +83,36 @@ function drawOuter(){
   ctx.stroke();
 }
 
-function drawInner(circles){
+// -----------------------------
+// Dessin triangle intérieur arrondi
+// -----------------------------
+function drawRoundedTriangle(tri, radii){
 
   ctx.beginPath();
 
   for(let i=0;i<3;i++){
-    const c = circles[i];
-    const next = circles[(i+1)%3];
 
-    const angle = Math.atan2(next.cy-c.cy,next.cx-c.cx);
+    const prev = tri[(i+2)%3];
+    const cur = tri[i];
+    const next = tri[(i+1)%3];
+
+    const v1 = normalize({x:prev.x-cur.x, y:prev.y-cur.y});
+    const v2 = normalize({x:next.x-cur.x, y:next.y-cur.y});
 
     const p1 = {
-      x: c.cx + Math.cos(angle)*c.rWhite,
-      y: c.cy + Math.sin(angle)*c.rWhite
+      x: cur.x + v1.x*radii[i],
+      y: cur.y + v1.y*radii[i]
     };
 
     const p2 = {
-      x: next.cx - Math.cos(angle)*next.rWhite,
-      y: next.cy - Math.sin(angle)*next.rWhite
+      x: cur.x + v2.x*radii[i],
+      y: cur.y + v2.y*radii[i]
     };
 
     if(i===0) ctx.moveTo(p1.x,p1.y);
     else ctx.lineTo(p1.x,p1.y);
 
-    ctx.lineTo(p2.x,p2.y);
+    ctx.quadraticCurveTo(cur.x,cur.y,p2.x,p2.y);
   }
 
   ctx.closePath();
@@ -105,6 +120,9 @@ function drawInner(circles){
   ctx.fill();
 }
 
+// -----------------------------
+// RENDER
+// -----------------------------
 function render(){
 
   ctx.clearRect(0,0,700,700);
@@ -115,17 +133,33 @@ function render(){
   const v2 = (Math.sin(t+2)+1)/2;
   const v3 = (Math.sin(t+4)+1)/2;
 
-  const circles = [
-    computeCircle(0,v1),
-    computeCircle(1,v2),
-    computeCircle(2,v3)
-  ];
+  const values = [v1,v2,v3];
 
-  drawInner(circles);
+  const inner = offsetTriangle(outer, offsetInner);
 
-  circles.forEach(c=>{
+  const blackRadii = values.map(v =>
+    blackMin + v*(blackMax-blackMin)
+  );
+
+  const whiteRadii = blackRadii.map(r => r + whiteGap);
+
+  drawRoundedTriangle(inner, whiteRadii);
+
+  // Dessin cercles noirs centrés dans chaque angle
+  inner.forEach((p,i)=>{
+    const prev = inner[(i+2)%3];
+    const next = inner[(i+1)%3];
+
+    const v1 = normalize({x:prev.x-p.x, y:prev.y-p.y});
+    const v2 = normalize({x:next.x-p.x, y:next.y-p.y});
+
+    const bis = normalize({x:v1.x+v2.x, y:v1.y+v2.y});
+
+    const cx = p.x + bis.x*whiteRadii[i];
+    const cy = p.y + bis.y*whiteRadii[i];
+
     ctx.beginPath();
-    ctx.arc(c.cx,c.cy,c.rBlack,0,Math.PI*2);
+    ctx.arc(cx,cy,blackRadii[i],0,Math.PI*2);
     ctx.fillStyle="#111";
     ctx.fill();
   });
