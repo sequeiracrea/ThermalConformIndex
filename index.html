@@ -3,161 +3,160 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Triangle Comfort Visualization</title>
+<title>Thermal Comfort Triangle</title>
 <style>
   body {
     margin: 0;
+    background: #f4f4f4;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
-    background: #f0f0f0;
   }
   canvas {
-    background: #fff;
-    border: 1px solid #ccc;
+    background: white;
   }
 </style>
 </head>
 <body>
-<canvas id="triangleCanvas" width="500" height="500"></canvas>
+
+<canvas id="canvas" width="600" height="600"></canvas>
 
 <script>
-const canvas = document.getElementById('triangleCanvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-// -------------------------
-// Configuration triangle
-// -------------------------
-const exterior = [
-  {x: 250, y: 50},
-  {x: 450, y: 400},
-  {x: 50,  y: 400}
+// --------------------------------
+// CONFIGURATION
+// --------------------------------
+const outerTriangle = [
+  {x: 300, y: 80},   // Top (Temp)
+  {x: 520, y: 500},  // Right (Hum)
+  {x: 80,  y: 500}   // Left (Press)
 ];
-const exteriorStroke = '#333';
-const offset = 30; // espace constant entre triangle extérieur et intérieur
 
-// Cercle aux angles
-const circleMin = 12;
-const circleMax = 40;
-const circleColor = '#98D7A7';
+const center = {
+  x: (outerTriangle[0].x + outerTriangle[1].x + outerTriangle[2].x)/3,
+  y: (outerTriangle[0].y + outerTriangle[1].y + outerTriangle[2].y)/3
+};
 
-// Variables confort (initiales à zéro)
-let comfortTemp = 0;
-let comfortHum  = 0;
-let comfortPress= 0;
+const innerGap = 60;      // espace constant extérieur → intérieur
+const circleGap = 18;     // espace constant sommet → cercle
+const circleMin = 10;
+const circleMax = 45;
 
-// -------------------------
-// Calcul du triangle intérieur
-// -------------------------
-function computeInnerTriangle() {
-  const center = {
-    x: (exterior[0].x + exterior[1].x + exterior[2].x)/3,
-    y: (exterior[0].y + exterior[1].y + exterior[2].y)/3
-  };
+let t = 0;
 
-  return exterior.map((p,i) => {
-    let v;
-    if(i===0) v = comfortTemp/100;
-    else if(i===1) v = comfortHum/100;
-    else v = comfortPress/100;
+// --------------------------------
+// UTILITAIRE NORMALISATION
+// --------------------------------
+function normalize(v){
+  const len = Math.hypot(v.x, v.y);
+  return {x: v.x/len, y: v.y/len};
+}
+
+// --------------------------------
+// CALCUL TRIANGLE INTÉRIEUR
+// --------------------------------
+function computeInnerTriangle(values){
+  return outerTriangle.map((p,i)=>{
+    const dir = normalize({
+      x: p.x - center.x,
+      y: p.y - center.y
+    });
+
+    const scale = innerGap + values[i] * 0.8;
 
     return {
-      x: center.x + (p.x - center.x)*(1 - offset/200*v),
-      y: center.y + (p.y - center.y)*(1 - offset/200*v)
+      x: p.x - dir.x * scale,
+      y: p.y - dir.y * scale
     };
   });
 }
 
-// -------------------------
-// Dessiner un triangle
-// -------------------------
-function drawTriangle(points, fillColor=null, strokeColor='#000', lineWidth=2) {
+// --------------------------------
+// CALCUL POSITION CERCLE
+// (bissectrice réelle de l’angle)
+// --------------------------------
+function computeCirclePosition(triangle, index, radius){
+  const prev = triangle[(index + 2) % 3];
+  const current = triangle[index];
+  const next = triangle[(index + 1) % 3];
+
+  const v1 = normalize({x: prev.x - current.x, y: prev.y - current.y});
+  const v2 = normalize({x: next.x - current.x, y: next.y - current.y});
+
+  const bisector = normalize({
+    x: v1.x + v2.x,
+    y: v1.y + v2.y
+  });
+
+  return {
+    x: current.x + bisector.x * (radius + circleGap),
+    y: current.y + bisector.y * (radius + circleGap)
+  };
+}
+
+// --------------------------------
+// DESSIN TRIANGLE
+// --------------------------------
+function drawTriangle(points, fill=null, stroke="#000", width=2){
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
   ctx.lineTo(points[1].x, points[1].y);
   ctx.lineTo(points[2].x, points[2].y);
   ctx.closePath();
-  if(fillColor){
-    ctx.fillStyle = fillColor;
+
+  if(fill){
+    ctx.fillStyle = fill;
     ctx.fill();
   }
-  ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = lineWidth;
+
+  ctx.lineWidth = width;
+  ctx.strokeStyle = stroke;
   ctx.stroke();
 }
 
-// -------------------------
-// Dessiner les cercles aux angles
-// -------------------------
-function drawCircles(points) {
-  points.forEach((p,i)=>{
-    let v;
-    if(i===0) v = comfortTemp/100;
-    else if(i===1) v = comfortHum/100;
-    else v = comfortPress/100;
+// --------------------------------
+// RENDER
+// --------------------------------
+function render(){
 
-    const radius = circleMin + v*(circleMax-circleMin);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // léger décalage vers l’intérieur pour simuler l’arrondi
-    const dx = (points[(i+2)%3].x - points[i].x)*0.05;
-    const dy = (points[(i+2)%3].y - points[i].y)*0.05;
+  // Simulation valeurs 0 → 100
+  const comfortTemp  = (Math.sin(t) + 1) * 50;
+  const comfortHum   = (Math.sin(t + 2) + 1) * 50;
+  const comfortPress = (Math.sin(t + 4) + 1) * 50;
+
+  const values = [comfortTemp, comfortHum, comfortPress];
+
+  // 1️⃣ Triangle extérieur
+  drawTriangle(outerTriangle, null, "#222", 3);
+
+  // 2️⃣ Triangle intérieur
+  const innerTriangle = computeInnerTriangle(values);
+  drawTriangle(innerTriangle, "#B7E4C7", "#222", 2);
+
+  // 3️⃣ Cercles parfaitement alignés
+  innerTriangle.forEach((point, i)=>{
+
+    const radius = circleMin + (values[i]/100) * (circleMax - circleMin);
+
+    const circlePos = computeCirclePosition(innerTriangle, i, radius);
 
     ctx.beginPath();
-    ctx.arc(p.x+dx, p.y+dy, radius, 0, Math.PI*2);
-    ctx.fillStyle = circleColor;
+    ctx.arc(circlePos.x, circlePos.y, radius, 0, Math.PI*2);
+    ctx.fillStyle = "#52B788";
     ctx.fill();
   });
+
+  t += 0.02;
+  requestAnimationFrame(render);
 }
 
-// -------------------------
-// Rendu principal
-// -------------------------
-function render() {
-  ctx.clearRect(0,0,canvas.width, canvas.height);
-
-  // Triangle extérieur (contour)
-  drawTriangle(exterior, null, exteriorStroke, 3);
-
-  // Triangle intérieur (plein)
-  const interior = computeInnerTriangle();
-  drawTriangle(interior, '#c0f0d0', '#333', 2);
-
-  // Cercles aux angles
-  drawCircles(interior);
-}
-
-// -------------------------
-// Récupération API
-// -------------------------
-async function fetchComfort() {
-  try {
-    const response = await fetch('https://ton-api/render-or-cloudflare/endpoint');
-    const data = await response.json();
-
-    // Calcul des valeurs confort (0-100)
-    comfortTemp  = Math.max(0, 100 - Math.abs(data.measures.temp - 22) * 5);
-    comfortHum   = Math.max(0, 100 - Math.abs(data.measures.rh - 50) * 1.5);
-    comfortPress = Math.max(0, 100 - Math.abs(data.measures.pres - 1013) * 0.5);
-
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-// -------------------------
-// Boucle continue
-// -------------------------
-async function updateLoop() {
-  await fetchComfort();
-  render();
-  requestAnimationFrame(updateLoop);
-}
-
-// -------------------------
-// Démarrage
-// -------------------------
-updateLoop();
+render();
 </script>
+
 </body>
 </html>
