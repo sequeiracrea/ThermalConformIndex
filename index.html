@@ -22,30 +22,25 @@ canvas{background:#0e0e0e;}
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-// -------------------
-// TRIANGLE EXTERIEUR
-// -------------------
 const outer = [
   {x:350, y:120},
   {x:620, y:600},
   {x:80,  y:600}
 ];
 
-const gap = 30; // distance fixe cercle → contour
+const gapOuter = 30;      // distance cercle → contour extérieur
 const circleMin = 20;
 const circleMax = 90;
 
+const innerCircleGap = 12; // 🔥 espace blanc visible constant
+
 let t = 0;
 
-// -------------------
 function normalize(v){
   const l = Math.hypot(v.x,v.y);
   return {x:v.x/l, y:v.y/l};
 }
 
-// -------------------
-// Calcul centre cercle
-// -------------------
 function computeCircle(index,value){
 
   const prev = outer[(index+2)%3];
@@ -54,21 +49,20 @@ function computeCircle(index,value){
 
   const v1 = normalize({x:prev.x-cur.x, y:prev.y-cur.y});
   const v2 = normalize({x:next.x-cur.x, y:next.y-cur.y});
-
   const bis = normalize({x:v1.x+v2.x, y:v1.y+v2.y});
 
-  const r = circleMin + value*(circleMax-circleMin);
+  const rBlack = circleMin + value*(circleMax-circleMin);
+
+  const rWhite = rBlack + innerCircleGap;
 
   return {
-    cx: cur.x + bis.x*(gap + r),
-    cy: cur.y + bis.y*(gap + r),
-    r
+    cx: cur.x + bis.x*(gapOuter + rWhite),
+    cy: cur.y + bis.y*(gapOuter + rWhite),
+    rBlack,
+    rWhite
   };
 }
 
-// -------------------
-// Dessin triangle extérieur
-// -------------------
 function drawOuter(){
   ctx.beginPath();
   ctx.moveTo(outer[0].x, outer[0].y);
@@ -80,9 +74,6 @@ function drawOuter(){
   ctx.stroke();
 }
 
-// -------------------
-// Dessin forme intérieure
-// -------------------
 function drawInner(circles){
 
   ctx.beginPath();
@@ -94,13 +85,13 @@ function drawInner(circles){
     const angle = Math.atan2(next.cy-c.cy,next.cx-c.cx);
 
     const p1 = {
-      x: c.cx + Math.cos(angle)*c.r,
-      y: c.cy + Math.sin(angle)*c.r
+      x: c.cx + Math.cos(angle)*c.rWhite,
+      y: c.cy + Math.sin(angle)*c.rWhite
     };
 
     const p2 = {
-      x: next.cx - Math.cos(angle)*next.r,
-      y: next.cy - Math.sin(angle)*next.r
+      x: next.cx - Math.cos(angle)*next.rWhite,
+      y: next.cy - Math.sin(angle)*next.rWhite
     };
 
     if(i===0) ctx.moveTo(p1.x,p1.y);
@@ -114,16 +105,12 @@ function drawInner(circles){
   ctx.fill();
 }
 
-// -------------------
-// RENDER
-// -------------------
 function render(){
 
   ctx.clearRect(0,0,700,700);
 
   drawOuter();
 
-  // simulation douce
   const v1 = (Math.sin(t)+1)/2;
   const v2 = (Math.sin(t+2)+1)/2;
   const v3 = (Math.sin(t+4)+1)/2;
@@ -138,7 +125,7 @@ function render(){
 
   circles.forEach(c=>{
     ctx.beginPath();
-    ctx.arc(c.cx,c.cy,c.r,0,Math.PI*2);
+    ctx.arc(c.cx,c.cy,c.rBlack,0,Math.PI*2);
     ctx.fillStyle="#111";
     ctx.fill();
   });
