@@ -22,78 +22,54 @@ canvas{background:#0e0e0e;}
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-// Triangle extérieur fixe
 const outer = [
   {x:350, y:120},
   {x:620, y:600},
   {x:80,  y:600}
 ];
 
-const offset = 70;        // distance constante entre triangles
-const blackMin = 25;
-const blackMax = 95;
-const whiteGap = 14;
+const blackMin = 20;
+const blackMax = 90;
+
+const whiteGap = 12;
+
+const minOffset = 25;  // proche du bord
+const maxOffset = 120; // proche du centre
 
 let t = 0;
 
-// ---------------------
-// Outils math
-// ---------------------
+// -----------------
 function normalize(v){
   const l = Math.hypot(v.x,v.y);
   return {x:v.x/l, y:v.y/l};
 }
 
-function lineIntersection(p1,p2,p3,p4){
-  const A1 = p2.y - p1.y;
-  const B1 = p1.x - p2.x;
-  const C1 = A1*p1.x + B1*p1.y;
+// centre global
+const center = {
+  x:(outer[0].x+outer[1].x+outer[2].x)/3,
+  y:(outer[0].y+outer[1].y+outer[2].y)/3
+};
 
-  const A2 = p4.y - p3.y;
-  const B2 = p3.x - p4.x;
-  const C2 = A2*p3.x + B2*p3.y;
+// -----------------
+function computeInnerPoints(values){
 
-  const det = A1*B2 - A2*B1;
-  return {
-    x:(B2*C1 - B1*C2)/det,
-    y:(A1*C2 - A2*C1)/det
-  };
-}
+  return outer.map((p,i)=>{
 
-// ---------------------
-// Offset géométrique parfait
-// ---------------------
-function offsetTriangle(tri, dist){
-
-  const lines = [];
-
-  for(let i=0;i<3;i++){
-    const p1 = tri[i];
-    const p2 = tri[(i+1)%3];
-
-    const edge = normalize({
-      x:p2.x-p1.x,
-      y:p2.y-p1.y
+    const dir = normalize({
+      x:center.x - p.x,
+      y:center.y - p.y
     });
 
-    const normal = {x:-edge.y, y:edge.x};
+    const move = minOffset + values[i]*(maxOffset-minOffset);
 
-    lines.push([
-      {x:p1.x + normal.x*dist, y:p1.y + normal.y*dist},
-      {x:p2.x + normal.x*dist, y:p2.y + normal.y*dist}
-    ]);
-  }
-
-  return [
-    lineIntersection(lines[0][0],lines[0][1],lines[1][0],lines[1][1]),
-    lineIntersection(lines[1][0],lines[1][1],lines[2][0],lines[2][1]),
-    lineIntersection(lines[2][0],lines[2][1],lines[0][0],lines[0][1])
-  ];
+    return {
+      x: p.x + dir.x*move,
+      y: p.y + dir.y*move
+    };
+  });
 }
 
-// ---------------------
-// Dessin triangle extérieur
-// ---------------------
+// -----------------
 function drawOuter(){
   ctx.beginPath();
   ctx.moveTo(outer[0].x, outer[0].y);
@@ -105,9 +81,7 @@ function drawOuter(){
   ctx.stroke();
 }
 
-// ---------------------
-// Triangle intérieur arrondi
-// ---------------------
+// -----------------
 function drawRoundedTriangle(tri, radii){
 
   ctx.beginPath();
@@ -142,9 +116,7 @@ function drawRoundedTriangle(tri, radii){
   ctx.fill();
 }
 
-// ---------------------
-// Render
-// ---------------------
+// -----------------
 function render(){
 
   ctx.clearRect(0,0,700,700);
@@ -157,7 +129,7 @@ function render(){
 
   const values = [v1,v2,v3];
 
-  const inner = offsetTriangle(outer, offset);
+  const innerPoints = computeInnerPoints(values);
 
   const blackRadii = values.map(v =>
     blackMin + v*(blackMax-blackMin)
@@ -165,10 +137,9 @@ function render(){
 
   const whiteRadii = blackRadii.map(r => r + whiteGap);
 
-  drawRoundedTriangle(inner, whiteRadii);
+  drawRoundedTriangle(innerPoints, whiteRadii);
 
-  // Cercles noirs parfaitement contenus
-  inner.forEach((p,i)=>{
+  innerPoints.forEach((p,i)=>{
     ctx.beginPath();
     ctx.arc(p.x,p.y,blackRadii[i],0,Math.PI*2);
     ctx.fillStyle="#111";
