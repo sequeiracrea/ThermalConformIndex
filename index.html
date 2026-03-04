@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Thermal Triangle PRO</title>
+<title>TCI Thermal Triangle</title>
 <style>
 body{
   margin:0;
@@ -11,6 +11,7 @@ body{
   justify-content:center;
   align-items:center;
   height:100vh;
+  font-family:Arial, sans-serif;
 }
 </style>
 </head>
@@ -21,6 +22,8 @@ body{
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
+const API_BASE = "https://indoor-sim-server.onrender.com";
+
 const W = canvas.width;
 const H = canvas.height;
 
@@ -29,16 +32,18 @@ const outerRadius = 230;
 const whiteOffset = 18;
 const circleGap = 12;
 
-let targetValues = [30,70,40];
-let values = [30,70,40];
+let targetValues = [50,50,50];
+let values = [50,50,50];
+
+let apiStatus = "connecting";
 
 // ======================
-// Utils
+// UTILS
 // ======================
 
 function lerp(a,b,t){ return a+(b-a)*t; }
 
-function normalize(v){
+function normalizeVec(v){
   const l = Math.hypot(v.x,v.y);
   return { x:v.x/l, y:v.y/l };
 }
@@ -55,11 +60,16 @@ function trianglePoints(radius){
   return pts;
 }
 
+function normalizeValue(value,min,max){
+  const n = (value - min) / (max - min);
+  return Math.max(0, Math.min(1, n)) * 100;
+}
+
 // ======================
-// Rounded triangle (true arcs)
+// TRIANGLE ARRONDI EXACT
 // ======================
 
-function drawRoundedTriangle(points, radii, doFill=true){
+function drawRoundedTriangle(points, radii, fill=true){
 
   ctx.beginPath();
 
@@ -69,12 +79,10 @@ function drawRoundedTriangle(points, radii, doFill=true){
     const curr = points[i];
     const next = points[(i+1)%3];
 
-    const v1 = normalize({x:prev.x-curr.x,y:prev.y-curr.y});
-    const v2 = normalize({x:next.x-curr.x,y:next.y-curr.y});
+    const v1 = normalizeVec({x:prev.x-curr.x,y:prev.y-curr.y});
+    const v2 = normalizeVec({x:next.x-curr.x,y:next.y-curr.y});
 
-    const angle = Math.acos(
-      (v1.x*v2.x + v1.y*v2.y)
-    );
+    const angle = Math.acos(v1.x*v2.x + v1.y*v2.y);
 
     const r = radii[i];
     const t = r / Math.tan(angle/2);
@@ -92,7 +100,7 @@ function drawRoundedTriangle(points, radii, doFill=true){
     if(i===0) ctx.moveTo(p1.x,p1.y);
     else ctx.lineTo(p1.x,p1.y);
 
-    const bisector = normalize({
+    const bisector = normalizeVec({
       x: v1.x + v2.x,
       y: v1.y + v2.y
     });
@@ -110,14 +118,14 @@ function drawRoundedTriangle(points, radii, doFill=true){
 
   ctx.closePath();
 
-  if(doFill){
+  if(fill){
     ctx.fillStyle="#f2f2f2";
     ctx.fill();
   }
 }
 
 // ======================
-// Draw
+// DRAW LOOP
 // ======================
 
 function draw(){
@@ -138,7 +146,7 @@ function draw(){
   ctx.lineTo(outer[1].x,outer[1].y);
   ctx.lineTo(outer[2].x,outer[2].y);
   ctx.closePath();
-  ctx.strokeStyle="#fff";
+  ctx.strokeStyle="#ffffff";
   ctx.lineWidth=3;
   ctx.stroke();
 
@@ -156,7 +164,7 @@ function draw(){
     radii.push(circleR + circleGap);
 
     const vertex = inner[i];
-    const dir = normalize({
+    const dir = normalizeVec({
       x:center.x-vertex.x,
       y:center.y-vertex.y
     });
@@ -179,7 +187,6 @@ function draw(){
   drawRoundedTriangle(inner,radii,false);
   ctx.clip();
 
-  // cercles noirs
   circles.forEach(c=>{
     ctx.beginPath();
     ctx.arc(c.x,c.y,c.r,0,Math.PI*2);
@@ -189,19 +196,59 @@ function draw(){
 
   ctx.restore();
 
+  drawStatus();
+
   requestAnimationFrame(draw);
 }
 
+function drawStatus(){
+  ctx.fillStyle="#888";
+  ctx.font="12px Arial";
+  ctx.fillText("API: "+apiStatus,20,H-20);
+}
+
+// ======================
+// API
+// ======================
+
+async function fetchData(){
+  try{
+    const res = await fetch(API_BASE + "/data");
+    if(!res.ok) throw new Error();
+
+    const data = await res.json();
+    const m = data.measures;
+
+    const tempNorm = normalizeValue(m.temp, 10, 35);
+    const rhNorm   = normalizeValue(m.rh, 0, 100);
+    const presNorm = normalizeValue(m.pres, 950, 1050);
+
+    targetValues = [tempNorm, rhNorm, presNorm];
+
+    apiStatus = "TCI live";
+
+  }catch(e){
+    apiStatus = "offline / waking";
+  }
+}
+
+async function checkHealth(){
+  try{
+    const res = await fetch(API_BASE + "/health");
+    if(res.ok) apiStatus="healthy";
+  }catch(e){
+    apiStatus="server sleep";
+  }
+}
+
+// polling
+setInterval(fetchData,5000);
+setInterval(checkHealth,15000);
+
+fetchData();
+checkHealth();
+
 draw();
-
-// Demo dynamique
-setInterval(()=>{
-  targetValues = targetValues.map(v=>{
-    v += Math.random()*40 -20;
-    return Math.max(0,Math.min(100,v));
-  });
-},2500);
-
 </script>
 </body>
 </html>
