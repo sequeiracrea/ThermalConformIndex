@@ -1,28 +1,24 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<title>Thermal Triangle Clean</title>
+<meta charset="UTF-8">
+<title>Thermal Triangle PRO</title>
 <style>
-  body {
-    margin: 0;
-    background: #0c0c0c;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-  }
-
-  canvas {
-    background: #0c0c0c;
-  }
+body{
+  margin:0;
+  background:#0c0c0c;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
 </style>
 </head>
 <body>
-<canvas id="canvas" width="600" height="600"></canvas>
+<canvas id="c" width="600" height="600"></canvas>
 
 <script>
-const canvas = document.getElementById("canvas");
+const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 const W = canvas.width;
@@ -31,117 +27,180 @@ const H = canvas.height;
 const center = { x: W/2, y: H/2 + 40 };
 const outerRadius = 230;
 const whiteOffset = 18;
-const cornerGap = 14;
+const circleGap = 12;
 
-// valeurs 0 → 100
-let values = [40, 60, 20];
+let targetValues = [30,70,40];
+let values = [30,70,40];
 
-// ===============================
+// ======================
 // Utils
-// ===============================
+// ======================
 
-function lerp(a,b,t){ return a + (b-a)*t; }
+function lerp(a,b,t){ return a+(b-a)*t; }
 
-function trianglePoints(radius) {
-  const pts = [];
+function normalize(v){
+  const l = Math.hypot(v.x,v.y);
+  return { x:v.x/l, y:v.y/l };
+}
+
+function trianglePoints(radius){
+  const pts=[];
   for(let i=0;i<3;i++){
-    const angle = -Math.PI/2 + i * (2*Math.PI/3);
+    const a = -Math.PI/2 + i*(2*Math.PI/3);
     pts.push({
-      x: center.x + Math.cos(angle) * radius,
-      y: center.y + Math.sin(angle) * radius
+      x:center.x + Math.cos(a)*radius,
+      y:center.y + Math.sin(a)*radius
     });
   }
   return pts;
 }
 
-function drawTriangle(points, stroke=false, fill=false) {
+// ======================
+// Rounded triangle (true arcs)
+// ======================
+
+function drawRoundedTriangle(points, radii, doFill=true){
+
   ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  ctx.lineTo(points[1].x, points[1].y);
-  ctx.lineTo(points[2].x, points[2].y);
+
+  for(let i=0;i<3;i++){
+
+    const prev = points[(i+2)%3];
+    const curr = points[i];
+    const next = points[(i+1)%3];
+
+    const v1 = normalize({x:prev.x-curr.x,y:prev.y-curr.y});
+    const v2 = normalize({x:next.x-curr.x,y:next.y-curr.y});
+
+    const angle = Math.acos(
+      (v1.x*v2.x + v1.y*v2.y)
+    );
+
+    const r = radii[i];
+    const t = r / Math.tan(angle/2);
+
+    const p1 = {
+      x: curr.x + v1.x * t,
+      y: curr.y + v1.y * t
+    };
+
+    const p2 = {
+      x: curr.x + v2.x * t,
+      y: curr.y + v2.y * t
+    };
+
+    if(i===0) ctx.moveTo(p1.x,p1.y);
+    else ctx.lineTo(p1.x,p1.y);
+
+    const bisector = normalize({
+      x: v1.x + v2.x,
+      y: v1.y + v2.y
+    });
+
+    const centerArc = {
+      x: curr.x + bisector.x * (r / Math.sin(angle/2)),
+      y: curr.y + bisector.y * (r / Math.sin(angle/2))
+    };
+
+    const startAngle = Math.atan2(p1.y-centerArc.y,p1.x-centerArc.x);
+    const endAngle   = Math.atan2(p2.y-centerArc.y,p2.x-centerArc.x);
+
+    ctx.arc(centerArc.x, centerArc.y, r, startAngle, endAngle);
+  }
+
   ctx.closePath();
 
-  if(fill){
-    ctx.fillStyle = "#f2f2f2";
+  if(doFill){
+    ctx.fillStyle="#f2f2f2";
     ctx.fill();
   }
-
-  if(stroke){
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-  }
 }
 
-function normalize(v){
-  const l = Math.hypot(v.x, v.y);
-  return { x: v.x/l, y: v.y/l };
-}
-
-// ===============================
+// ======================
 // Draw
-// ===============================
+// ======================
 
 function draw(){
 
   ctx.clearRect(0,0,W,H);
 
-  // triangle extérieur fixe
+  // interpolation fluide
+  for(let i=0;i<3;i++){
+    values[i] += (targetValues[i] - values[i]) * 0.08;
+  }
+
   const outer = trianglePoints(outerRadius);
-  drawTriangle(outer, true, false);
-
-  // triangle blanc interne (toujours aligné)
   const inner = trianglePoints(outerRadius - whiteOffset);
-  drawTriangle(inner, false, true);
 
-  // cercles
+  // triangle extérieur
+  ctx.beginPath();
+  ctx.moveTo(outer[0].x,outer[0].y);
+  ctx.lineTo(outer[1].x,outer[1].y);
+  ctx.lineTo(outer[2].x,outer[2].y);
+  ctx.closePath();
+  ctx.strokeStyle="#fff";
+  ctx.lineWidth=3;
+  ctx.stroke();
+
+  const radii=[];
+  const circles=[];
+
   for(let i=0;i<3;i++){
 
-    const val = values[i] / 100;
+    const val = values[i]/100;
+
+    const minR=18;
+    const maxR=75;
+    const circleR=lerp(minR,maxR,val);
+
+    radii.push(circleR + circleGap);
 
     const vertex = inner[i];
-
-    // direction vers centre
-    const toCenter = normalize({
-      x: center.x - vertex.x,
-      y: center.y - vertex.y
+    const dir = normalize({
+      x:center.x-vertex.x,
+      y:center.y-vertex.y
     });
 
-    // taille cercle
-    const minR = 16;
-    const maxR = 75;
-    const radius = lerp(minR, maxR, val);
+    const minDist=circleR+circleGap;
+    const maxDist=120;
+    const dist=lerp(maxDist,minDist,val);
 
-    // distance depuis sommet :
-    // plus valeur haute → plus proche centre
-    const minDist = radius + cornerGap;
-    const maxDist = 120;
+    const cx = vertex.x + dir.x*dist;
+    const cy = vertex.y + dir.y*dist;
 
-    const dist = lerp(maxDist, minDist, val);
-
-    const cx = vertex.x + toCenter.x * dist;
-    const cy = vertex.y + toCenter.y * dist;
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI*2);
-    ctx.fillStyle = "#111111";
-    ctx.fill();
+    circles.push({x:cx,y:cy,r:circleR});
   }
+
+  // triangle blanc arrondi
+  drawRoundedTriangle(inner,radii,true);
+
+  // CLIP
+  ctx.save();
+  drawRoundedTriangle(inner,radii,false);
+  ctx.clip();
+
+  // cercles noirs
+  circles.forEach(c=>{
+    ctx.beginPath();
+    ctx.arc(c.x,c.y,c.r,0,Math.PI*2);
+    ctx.fillStyle="#111";
+    ctx.fill();
+  });
+
+  ctx.restore();
+
+  requestAnimationFrame(draw);
 }
 
 draw();
 
-// ===============================
-// Demo animation
-// ===============================
-
+// Demo dynamique
 setInterval(()=>{
-  values = values.map(v=>{
-    v += (Math.random()*20 - 10);
-    return Math.max(0, Math.min(100, v));
+  targetValues = targetValues.map(v=>{
+    v += Math.random()*40 -20;
+    return Math.max(0,Math.min(100,v));
   });
-  draw();
-}, 1200);
+},2500);
 
 </script>
 </body>
